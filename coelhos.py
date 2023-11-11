@@ -2,6 +2,7 @@ import pandas as pd
 from openpyxl import load_workbook
 from unicodedata import normalize
 from collections import defaultdict
+from openpyxl.formatting.rule import ColorScaleRule
 
 def get_sheets(filename):
     wb = load_workbook(filename, read_only=True)
@@ -48,6 +49,11 @@ class Coelho:
         self.mae = None
         self.filhos = []
 
+    def __repr__(self):
+        string = f'Coelho {self.nome} ({self.sexo})\n'
+        string+= f'Descendentes: \n{self.get_arvore()}'
+        return string
+
     def add_pai(self, pai):
         if pai.get_sexo() != 'M':
             raise Exception(f'Pai do coelho {self.nome}, coelho {pai.nome}, é fêmea')
@@ -77,8 +83,27 @@ class Coelho:
 
 class GrauParentesco:
     def __init__(self, filename, sheet):
+        self.filename = filename
+        self.sheet_coelhos = sheet
+        self.sheet_parentesco = 'grau_parentesco'
+        self.sheet_detalhes = 'coeficientes_detalhes'
+
         self.dfCoelhos = get_dataframe(filename, sheet)
         self.coelhos = self.criar_coelhos()
+        self.init_coeficiente()
+        self.calcular()
+
+    def init_coeficiente(self):
+        self.coeficiente_parentesco = defaultdict(dict)
+        
+        machos = [coelho for coelho in self.coelhos.values() if coelho.get_sexo() == 'M']
+        for macho in machos:
+            self.init_coeficiente_coelho(macho)
+        
+    def init_coeficiente_coelho(self, coelho):
+        coelhos_opostos = [c.nome for c in self.coelhos.values() if c.get_sexo() != coelho.get_sexo()]
+        self.coeficiente_parentesco[coelho.nome] = {coelho_oposto: 0 for coelho_oposto in coelhos_opostos}
+
 
     @property
     def get_entradadados(self):
@@ -102,38 +127,97 @@ class GrauParentesco:
         return coelhos
 
     def calc_coeficiente_individual(self, coelho_inicial, coelho_atual=None, grau=0, descendente=False):
-        if coelho_atual == None: coelho_atual = coelho_inicial
+        if coelho_atual == None: 
+            coelho_atual = coelho_inicial
+            self._historico = []
+            self.visitados = defaultdict(bool)
+            self.init_coeficiente_coelho(coelho_inicial)
+
         self.visitados[coelho_atual.nome] = True
+        direcao = '\\'[0] if descendente else '/'
+        direcao = '' if coelho_atual == coelho_inicial else direcao
+        self._historico.append(direcao + coelho_atual.nome)
 
         # Se o coelho atual for do sexo oposto ao coelho inicial
         if coelho_atual.get_sexo() != coelho_inicial.get_sexo():
             self.coeficiente_parentesco[coelho_inicial.nome][coelho_atual.nome] += 0.5**grau
+            self.coeficientes_detalhados.append({
+                'origem': coelho_inicial.nome,
+                'destino': coelho_atual.nome,
+                'parentesco': ''.join(self._historico.copy()),
+                'coeficiente': 0.5**grau
+            })
         
         for filho in coelho_atual.filhos:
             if not self.visitados[filho.nome]:
-                self.calc_coeficiente_macho(coelho_inicial, filho, grau+1, descendente=True)
+                self.calc_coeficiente_individual(coelho_inicial, filho, grau+1, descendente=True)
 
         if coelho_atual.get_pai() and not descendente:
-            self.calc_coeficiente_macho(coelho_inicial, coelho_atual.get_pai(), grau+1)
+            self.calc_coeficiente_individual(coelho_inicial, coelho_atual.get_pai(), grau+1)
         if coelho_atual.get_mae() and not descendente:
-            self.calc_coeficiente_macho(coelho_inicial, coelho_atual.get_mae(), grau+1)
+            self.calc_coeficiente_individual(coelho_inicial, coelho_atual.get_mae(), grau+1)
         
         self.visitados[coelho_atual.nome] = False
+        self._historico.pop()
 
     def calcular(self):
-        femeas = [coelho.nome for coelho in self.coelhos.values() if coelho.get_sexo() == 'F']
-        machos = [coelho.nome for coelho in self.coelhos.values() if coelho.get_sexo() == 'M']
-        print(f'Fêmeas: {femeas}')
-        print(f'Machos: {machos}')
+        self.coeficientes_detalhados = []
 
-        # Inicializa o mapa de coeficientes de parentesco
-        self.coeficiente_parentesco = defaultdict(dict)
-        for macho in machos:
-            self.coeficiente_parentesco[macho] = {femea: 0 for femea in femeas}
         # Para cada coelho macho, calcula o coeficiente de parentesco
         for coelho in self.coelhos.values():
             if coelho.get_sexo() == 'M':
-                self.visitados = defaultdict(bool)
                 print(f'Calculando coeficientes de parentesco para o coelho {coelho.nome}')
-                self.calc_coeficiente_macho(coelho)
+                self.calc_coeficiente_individual(coelho)
+
+    def get_parentescos(self):
+        return self._parentescos
+    
+    def salvar_coeficientes(self):
+        # Cria o dataframe
+        df = pd.DataFrame(self.coeficiente_parentesco)
+        df.fillna(0, inplace=True)
+        df.index.name = 'coelhos'
+        df = df.applymap(lambda x: round(x, 4))
+        df[df<0.0015] = 0
+
+        # Salva o dataframe no arquivo
+        with pd.ExcelWriter(self.filename, engine="openpyxl", mode='a') as writer:
+            # Remove worksheet se já existir
+            if self.sheet_parentesco in writer.book.sheetnames:
+                idx = writer.book.sheetnames.index(self.sheet_parentesco)
+                writer.book.remove(writer.book.worksheets[idx])
+
+            # Salva o dataframe no arquivo
+            df.to_excel(writer, sheet_name=self.sheet_parentesco)
+
+            # Formatação condicional
+            workbook = writer.book
+            worksheet = writer.sheets[self.sheet_parentesco]
+
+            ultima_celula = worksheet.cell(
+                row=df.shape[0]+1, 
+                column=df.shape[1]+1
+            ).coordinate
+            cell_range = f'B2:{ultima_celula}'
+            
+            worksheet.conditional_formatting.add(cell_range, 
+                ColorScaleRule(
+                    start_type='num', start_value=0, start_color='375623',
+                    mid_type='num', mid_value=0.25, mid_color='ffc000',
+                    end_type='num', end_value=0.7, end_color='FF0000'
+                )
+            )
+
+    def salvar_coeficientes_detalhados(self):
+        df = pd.DataFrame(self.coeficientes_detalhados)
+        df.sort_values(by=['origem', 'destino'], inplace=True)
         
+        # Salva o dataframe no arquivo
+        with pd.ExcelWriter(self.filename, engine="openpyxl", mode='a') as writer:
+            # Remove worksheet se já existir
+            if self.sheet_detalhes in writer.book.sheetnames:
+                idx = writer.book.sheetnames.index(self.sheet_detalhes)
+                writer.book.remove(writer.book.worksheets[idx])
+
+            # Salva o dataframe no arquivo
+            df.to_excel(writer, sheet_name=self.sheet_detalhes, index=False)
