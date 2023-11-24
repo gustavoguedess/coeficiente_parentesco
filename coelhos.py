@@ -3,6 +3,7 @@ from openpyxl import load_workbook
 from unicodedata import normalize
 from collections import defaultdict
 from openpyxl.formatting.rule import ColorScaleRule
+import pygraphviz as PG
 
 def get_sheets(filename):
     wb = load_workbook(filename, read_only=True)
@@ -88,6 +89,7 @@ class GrauParentesco:
         self.sheet_parentesco = 'grau_parentesco'
         self.sheet_detalhes = 'coeficientes_detalhes'
 
+        self.grafo_parentesco = PG.AGraph(directed=True, strict=True)
         self.dfCoelhos = get_dataframe(filename, sheet)
         self.coelhos = self.criar_coelhos()
         self.init_coeficiente()
@@ -122,8 +124,10 @@ class GrauParentesco:
             mae = row['mae']
             if pai:
                 coelhos[nome].add_pai(coelhos[pai])
+                self.grafo_parentesco.add_edge(pai, nome)
             if mae:
                 coelhos[nome].add_mae(coelhos[mae])
+                self.grafo_parentesco.add_edge(mae, nome)
         return coelhos
 
     def calc_coeficiente_individual(self, coelho_inicial, coelho_atual=None, grau=0, descendente=False):
@@ -172,6 +176,10 @@ class GrauParentesco:
     def get_parentescos(self):
         return self._parentescos
     
+    def salvar_arvore(self):
+        self.grafo_parentesco.layout(prog='dot')
+        self.grafo_parentesco.draw('arvore.png')
+
     def salvar_coeficientes(self):
         # Cria o dataframe
         df = pd.DataFrame(self.coeficiente_parentesco)

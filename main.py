@@ -18,5 +18,7 @@ for parentesco in gp.coeficientes_detalhados:
 
 
 #%%
-gp.salvar_coeficientes()
-gp.salvar_coeficientes_detalhados()
+# gp.salvar_coeficientes()
+
+# gp.salvar_coeficientes_detalhados()
+gp.salvar_arvore()
