@@ -1,103 +1,218 @@
-import tkinter as tk
-from tkinter import filedialog
+import flet as ft
 import coelhos
 
-def open_sheet():
-    root.filename = filedialog.askopenfilename(initialdir=".", title="Selecione a Planilha", filetypes=(("xlsx files", "*.xlsx"), ("all files", "*.*")))
-    if root.filename:
-        input_update()
+AVISO_PRINCIPAL = "Selecione uma planilha para começar!"
+AVISO_CARREGANDO = "Carregando planilha..."
+AVISO_SUCESSO = "Planilha carregada! Salve o resultado! :D"
+AVISO_PAGINA = "Selecione uma página!"
+AVISO_ERRO = "Erro ao carregar planilha! Verifique se o arquivo está correto."
+AVISO_ERRO_CARREGAR = "Erro ao carregar planilha! Verifique se o arquivo está correto."
+AVISO_SALVANDO = "Salvando planilha..."
+AVISO_SALVO = "Planilha salva com sucesso!"
 
-def set_txt_coelhos(txt):
-    txt_coelhos.config(state="normal")
-    txt_coelhos.delete("1.0", tk.END)
-    txt_coelhos.insert("1.0", txt)
-    txt_coelhos.config(state="disabled")
+def main(page: ft.page):
+    ###### Page Config ######
+    page.title = "Grau de Parentesco de Coelhos"
+    page.window_width = 600
+    page.window_height = 800
 
-def set_aviso(msg, success=None):
-    if success is None:
-        ent_aviso.config(fg="black")
-    elif success:
-        ent_aviso.config(fg="green")
-    else:
-        ent_aviso.config(fg="red")
-    ent_aviso.config(state="normal")
-    ent_aviso.delete(0, tk.END)
-    ent_aviso.insert(0, msg)
-    ent_aviso.config(state="disabled")
 
-def change_sheet(sheet):
-    global gp
-    set_txt_coelhos("")
-    set_aviso("Carregando planilha...", success=None)
+    ###### File Input ######
+    def pick_file_result(e: ft.FilePickerResultEvent):
+        global filename
 
-    print(sheet)
+        set_aviso(AVISO_CARREGANDO)
 
-    filename = root.filename
+        try:
+            filename = e.files[0].name
+            selected_filename.value = filename
+            selected_filename.update()
+            print('Filename:', filename)
+        except:
+            set_aviso(AVISO_ERRO_CARREGAR)
 
-    try:
-        gp = coelhos.GrauParentesco(filename, sheet)
-        set_txt_coelhos(gp.get_entradadados)
-        set_aviso("Planilha carregada com sucesso!", success=True)
+        clear_input_table()
+        clear_output_table()
 
-    except Exception as e:
-        set_aviso(str(e), success=False)
+        if filename.endswith('.xlsx'):
+            sheets = coelhos.get_sheets(filename)
+            print('Sheets:', sheets)
+
+            dropdown_sheets.options = [ft.dropdown.Option(sheet) for sheet in sheets]
+            dropdown_sheets.disabled = False
+            dropdown_sheets.update()
+
+            set_aviso(AVISO_PAGINA)
+        else:
+            dropdown_sheets.options = []
+            dropdown_sheets.disabled = True
+            dropdown_sheets.update()
+            set_aviso(AVISO_ERRO_CARREGAR)
+
+
+    filepick_input = ft.FilePicker(on_result=pick_file_result)
+    page.overlay.append(filepick_input)
+
+    insert_button = ft.ElevatedButton(
+        "Inserir Planilha", 
+        icon=ft.icons.UPLOAD_FILE,
+        on_click=lambda _: filepick_input.pick_files(allow_multiple=False)
+    )
+    selected_filename = ft.Text()
+
+    dropdown_sheets = ft.Dropdown(
+        width=130,
+        options=[],
+        disabled=True,
+        on_change=lambda e: change_tables(filename, e.data)
+    )
+
+    def change_tables(filename, sheet):
+        global gp
+
+        clear_input_table()
+        clear_output_table()
+
+        try:
+            gp = coelhos.GrauParentesco(filename, sheet)
+            change_input_table(gp.get_data_input)
+            change_output_table(gp.get_data_output)
+        except Exception as e:
+            set_aviso(AVISO_ERRO)
+            raise e
+    ###### Input Table ######
+
+    def change_input_table(data):
+        for row in data:
+            input_table.rows.append(
+                ft.DataRow(
+                    cells=[
+                        ft.DataCell(ft.Text(row['individuo'])),
+                        ft.DataCell(ft.Text(row['pai'])),
+                        ft.DataCell(ft.Text(row['mae'])),
+                        ft.DataCell(ft.Text(row['sexo'])),
+                    ]
+                )
+            )
+        input_table.update()
     
-    return tk._setit(var, sheet)
+    def clear_input_table():
+        input_table.rows = []
+        input_table.update()
+
+    input_table = ft.DataTable(
+        columns=[
+            ft.DataColumn(ft.Text("Indivíduo")),
+            ft.DataColumn(ft.Text("Pai")),
+            ft.DataColumn(ft.Text("Mãe")),
+            ft.DataColumn(ft.Text("Sexo"))
+        ],
+        rows=[
+        ],
+        show_bottom_border=True,
+    )
+    lv_input = ft.ListView(height=250, spacing=10, padding=20, auto_scroll=False)
+    lv_input.controls.append(input_table)
+
+    text_input = ft.Text("COELHOS")
 
 
-def input_update():
-    edt_input.config(state="normal")
-    edt_input.delete(0, tk.END)
-    edt_input.insert(0, root.filename)
-    edt_input.config(state="disabled")
+    ###### Output Table ######
 
-    sheets = coelhos.get_sheets(root.filename)
-    
-    menu = dd_sheet["menu"]
-    menu.delete(0, "end")
-    for sheet in sheets:
-        menu.add_command(
-            label=sheet, 
-            command=change_sheet(sheet)
-        )
-    dd_sheet["menu"].invoke(0)
+    def change_output_table(data):
+        for row in data:
+            output_table.rows.append(
+                ft.DataRow(
+                    cells=[
+                        ft.DataCell(ft.Text(row['origem'])),
+                        ft.DataCell(ft.Text(row['destino'])),
+                        ft.DataCell(ft.Text(row['parentesco'])),
+                        ft.DataCell(ft.Text(row['coeficiente'])),
+                    ]
+                )
+            )
 
+        output_table.update()
 
+        save_button.disabled = False
+        save_button.update()
 
-root = tk.Tk()
-root.title("Gerador de Coeficiente de Parentesco")
-root.geometry("500x500")
+        set_aviso(AVISO_SUCESSO)
 
+    def clear_output_table():
+        output_table.rows = []
+        output_table.update()
 
-edt_input = tk.Entry(root, state="disabled")
-edt_input.pack(fill="x")
+        save_button.disabled = True
+        save_button.update()
 
-btn_input = tk.Button(root, text="Abrir", command=open_sheet)
-btn_input.pack()
+    output_table = ft.DataTable(
+        columns=[
+            ft.DataColumn(ft.Text("Origem")),
+            ft.DataColumn(ft.Text("Destino")),
+            ft.DataColumn(ft.Text("Parentesco")),
+            ft.DataColumn(ft.Text("Coeficiente")),
+        ],
+        rows=[
+        ],
+        show_bottom_border=True,
+    )
+    lv_output = ft.ListView(height=250, spacing=10, padding=20, auto_scroll=False)
+    lv_output.controls.append(output_table)
 
-var = tk.StringVar()
-dd_sheet = tk.OptionMenu(root, var, "option1", "option2", "option3")
-dd_sheet.pack()
+    text_output = ft.Text("PARENTESCOS")
 
-ent_aviso = tk.Entry(root, state="disabled")
-ent_aviso.pack(fill="both")
+    ###### Save Button ######
 
-#center 
-txt_coelhos = tk.Text(root, state="disabled", wrap="none")
-txt_coelhos.pack(fill="both", expand=True)
+    def save_output(e: ft.FilePickerResultEvent):
+        status_text.value = AVISO_SALVANDO
+        status_text.update()
 
-ent_coelhos = tk.Entry(root)
-ent_coelhos.insert(0, "Grau de Parentesco")
-ent_coelhos.pack()
+        output_filename = e.path
 
-btn_calcular = tk.Button(root, text="Calcular")
-btn_calcular.pack()
+        gp.copy_sheet(output_filename)
+        gp.salvar_coeficientes()
+        gp.salvar_coeficientes_detalhados()
 
+        set_aviso(AVISO_SALVO)
 
-# lbl_input.grid(column=0, row=0)
-# edt_input.grid(column=1, row=0)
-# btn_input.grid(column=2, row=0)
-# lbl_sheet.grid(column=0, row=1)
-# dd_sheet.grid(column=1, row=1)
+    filepicker_save = ft.FilePicker(on_result=save_output)
+    page.overlay.append(filepicker_save)
+    save_button = ft.ElevatedButton("Salvar", icon=ft.icons.SAVE, disabled=True, on_click=lambda _: filepicker_save.save_file(allowed_extensions=['xlsx']))
 
-root.mainloop()
+    ###### Aviso ######
+
+    def set_aviso(text):
+        status_text.value = text
+        status_text.update()
+        if text == AVISO_SALVO:
+            status_container.bgcolor = ft.colors.GREEN_200
+        elif 'erro' in text.lower():
+            status_container.bgcolor = ft.colors.RED_200
+        else:
+            status_container.bgcolor = ft.colors.AMBER
+        status_container.update()
+
+    status_text = ft.Text(AVISO_PRINCIPAL, color=ft.colors.BLACK)
+    status_container = ft.Container(
+        content=status_text,
+        bgcolor=ft.colors.AMBER,
+        border_radius=8,
+        padding=10,
+    )
+
+    ###### layout ######
+
+    controls = ft.Column([
+        ft.Row([insert_button, selected_filename, dropdown_sheets], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+        ft.Divider(),
+        ft.Column([text_input, lv_input], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+        ft.Divider(),
+        ft.Column([text_output, lv_output], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+        ft.Row([save_button], alignment=ft.MainAxisAlignment.CENTER),
+        ft.Row([status_container], alignment=ft.MainAxisAlignment.CENTER),
+    ])
+
+    page.add(controls)
+
+ft.app(target=main, assets_dir='assets')

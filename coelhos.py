@@ -4,6 +4,7 @@ from unicodedata import normalize
 from collections import defaultdict
 from openpyxl.formatting.rule import ColorScaleRule
 import pygraphviz as PG
+import os
 
 def get_sheets(filename):
     wb = load_workbook(filename, read_only=True)
@@ -108,8 +109,12 @@ class GrauParentesco:
 
 
     @property
-    def get_entradadados(self):
-        return self.dfCoelhos.to_string()
+    def get_data_input(self):
+        return self.dfCoelhos.to_dict('records')
+    
+    @property
+    def get_data_output(self):
+        return self.coeficientes_detalhados
     
     def criar_coelhos(self):
         coelhos = {}
@@ -176,6 +181,10 @@ class GrauParentesco:
     def get_parentescos(self):
         return self._parentescos
     
+    def copy_sheet(self, filename):
+        os.system(f'cp {self.filename} {filename}')
+        self.filename = filename
+
     def salvar_arvore(self):
         self.grafo_parentesco.layout(prog='dot')
         self.grafo_parentesco.draw('arvore.png')
