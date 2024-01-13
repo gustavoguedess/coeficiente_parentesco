@@ -5,6 +5,7 @@ from collections import defaultdict
 from openpyxl.formatting.rule import ColorScaleRule
 # import pygraphviz as PG
 import os
+import shutil
 
 def get_sheets(filename):
     wb = load_workbook(filename, read_only=True)
@@ -182,7 +183,7 @@ class GrauParentesco:
         return self._parentescos
     
     def copy_sheet(self, filename):
-        os.system(f'cp {self.filename} {filename}')
+        shutil.copy(self.filename, filename)
         self.filename = filename
 
     def salvar_arvore(self):

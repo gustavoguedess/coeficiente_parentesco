@@ -24,10 +24,11 @@ def main(page: ft.page):
         set_aviso(AVISO_CARREGANDO)
 
         try:
-            filename = e.files[0].name
-            selected_filename.value = filename
+            filename = e.files[0].path
+            name = e.files[0].name
+            selected_filename.value = name
             selected_filename.update()
-            print('Filename:', filename)
+            print('Filename:', name)
         except:
             set_aviso(AVISO_ERRO_CARREGAR)
 
@@ -157,7 +158,7 @@ def main(page: ft.page):
         ],
         show_bottom_border=True,
     )
-    lv_output = ft.ListView(height=250, spacing=10, padding=20, auto_scroll=False)
+    lv_output = ft.ListView(height=200, spacing=10, padding=20, auto_scroll=False)
     lv_output.controls.append(output_table)
 
     text_output = ft.Text("PARENTESCOS")
@@ -170,6 +171,9 @@ def main(page: ft.page):
 
         output_filename = e.path
 
+        if not output_filename.endswith('.xlsx'):
+            output_filename += '.xlsx'
+            
         gp.copy_sheet(output_filename)
         gp.salvar_coeficientes()
         gp.salvar_coeficientes_detalhados()
