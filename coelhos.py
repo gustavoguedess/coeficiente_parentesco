@@ -120,14 +120,14 @@ class GrauParentesco:
     def criar_coelhos(self):
         coelhos = {}
         for index, row in self.dfCoelhos.iterrows():
-            nome = row['individuo']
-            sexo = row['sexo']
+            nome = row['individuo'].strip()
+            sexo = row['sexo'].strip()
             coelhos[nome] = Coelho(nome, sexo)
 
         for index, row in self.dfCoelhos.iterrows():
-            nome = row['individuo']
-            pai = row['pai']
-            mae = row['mae']
+            nome = row['individuo'].strip()
+            pai = row['pai'].strip()
+            mae = row['mae'].strip()
             if pai:
                 coelhos[nome].add_pai(coelhos[pai])
                 # self.grafo_parentesco.add_edge(pai, nome)
